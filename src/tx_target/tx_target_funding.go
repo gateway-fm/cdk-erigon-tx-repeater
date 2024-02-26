@@ -69,7 +69,7 @@ func (tt *TxTarget) EnsureFunding(txs []*types.Tx) error {
 }
 
 func (tt *TxTarget) makeFundingTx(recipientAddress string, nonceAddition uint64) ([]byte, error) {
-	privateKey, err := crypto.HexToECDSA("")
+	privateKey, err := crypto.HexToECDSA(tt.faucetPrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (tt *TxTarget) makeFundingTx(recipientAddress string, nonceAddition uint64)
 	txData := &ethtypes.LegacyTx{
 		Nonce:    nonce + nonceAddition,
 		To:       &toAddress,
-		Value:    big.NewInt(2000000000000000000),
+		Value:    big.NewInt(0).Mul(big.NewInt(1000000000000000000), big.NewInt(25)),
 		Gas:      uint64(1000000),
 		GasPrice: big.NewInt(100000000000),
 		Data:     nil,

@@ -4,7 +4,6 @@ go 1.20
 
 require (
 	github.com/ethereum/go-ethereum v1.13.12
-	github.com/umbracle/fastrlp v0.1.0
 )
 
 require (

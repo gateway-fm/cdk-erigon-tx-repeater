@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -15,7 +16,18 @@ func main() {
 	var txs []*txtargettypes.Tx
 	var err error
 
-	ethClient, err := ethclient.Dial("http://localhost:8467")
+	var source string
+	var target string
+	var txCount int
+	var faucetPrivateKey string
+
+	flag.StringVar(&source, "source", "https://zkevm-rpc.com", "RPC address to get transactions from")
+	flag.StringVar(&target, "destination", "http://localhost:8467", "RPC addresses to send transactions to")
+	flag.StringVar(&faucetPrivateKey, "faucet-key", "", "Private key of the faucet wallet")
+	flag.IntVar(&txCount, "tx-count", 0, "Block number to start from")
+	flag.Parse()
+
+	ethClient, err := ethclient.Dial(target)
 	if err != nil {
 		fmt.Printf("error: %+v\n", err)
 		return
@@ -34,13 +46,13 @@ func main() {
 		return
 	}
 
-	txSource := txsource.New("https://zkevm-rpc.com", persistor)
-	if txs, err = txSource.FetchAllTransactions(128); err != nil {
+	txSource := txsource.New(source, persistor)
+	if txs, err = txSource.FetchAllTransactions(txCount); err != nil {
 		fmt.Printf("error: %+v\n", err)
 		return
 	}
 
-	txTarget := txtarget.New("http://localhost:8467", ethClient)
+	txTarget := txtarget.New(target, ethClient, faucetPrivateKey)
 	if err := txTarget.EnsureFunding(txs); err != nil {
 		fmt.Printf("error: %+v\n", err)
 		return

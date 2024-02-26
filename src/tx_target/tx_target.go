@@ -15,14 +15,16 @@ import (
 )
 
 type TxTarget struct {
-	endpoint  string
-	ethClient *ethclient.Client
+	endpoint         string
+	ethClient        *ethclient.Client
+	faucetPrivateKey string
 }
 
-func New(endpoint string, ethClient *ethclient.Client) *TxTarget {
+func New(endpoint string, ethClient *ethclient.Client, faucetPrivateKey string) *TxTarget {
 	return &TxTarget{
-		endpoint:  endpoint,
-		ethClient: ethClient,
+		endpoint:         endpoint,
+		ethClient:        ethClient,
+		faucetPrivateKey: faucetPrivateKey,
 	}
 }
 
@@ -30,14 +32,30 @@ func (tt *TxTarget) SendTxs(txs []*types.Tx) error {
 	var txHash string
 	var err error
 
+	txHashes := make([]string, 0, len(txs))
+	fromsMap := map[string]bool{}
+
 	for i, tx := range txs {
+		if _, ok := fromsMap[tx.From]; ok {
+			fmt.Printf("Waiting for batch with %d entries\n", len(txHashes))
+			if err := tt.areTxsProcessed(txHashes); err != nil {
+				return nil
+			}
+
+			fromsMap = make(map[string]bool)
+			txHashes = make([]string, 0, len(txs))
+		}
+
 		if txHash, err = tt.SendTx(tx.Bytes); err != nil {
 			return err
 		}
+		fromsMap[tx.From] = true
+		txHashes = append(txHashes, txHash)
 		fmt.Printf("%d: %s\n", i, txHash)
-		if ok := tt.isTxProcessed(txHash); !ok {
-			return fmt.Errorf("tx not processed: %s", txHash)
-		}
+	}
+
+	if err := tt.areTxsProcessed(txHashes); err != nil {
+		return nil
 	}
 
 	return nil
@@ -65,13 +83,23 @@ func (tt *TxTarget) SendTx(rlp []byte) (string, error) {
 	return transactionRes.Result, nil
 }
 
+func (tt *TxTarget) areTxsProcessed(txHashes []string) error {
+	for _, txHash := range txHashes {
+		if ok := tt.isTxProcessed(txHash); !ok {
+			return fmt.Errorf("tx not processed: %s", txHash)
+		}
+	}
+
+	return nil
+}
+
 func (tt *TxTarget) isTxProcessed(txHash string) bool {
 	ctx := context.Background()
 
 	for {
 		_, err := tt.ethClient.TransactionReceipt(ctx, common.HexToHash(txHash))
 		if err != nil {
-			time.Sleep(1 * time.Second)
+			time.Sleep(10 * time.Microsecond)
 			continue
 		}
 

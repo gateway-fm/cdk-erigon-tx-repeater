@@ -2,6 +2,7 @@ package txsource
 
 import (
 	"encoding/json"
+	"fmt"
 
 	persistor "github.com/gateway-fm/tx-repeater/src/persistor"
 	types "github.com/gateway-fm/tx-repeater/src/tx_source/types"
@@ -37,15 +38,15 @@ func (ts *TxSource) FetchAllTransactions(minNumberOfTx int) ([]*txtargettypes.Tx
 
 			if block != nil {
 				txs = append(txs, block.Transactions...)
+				if len(txs) >= minNumberOfTx {
+					break
+				}
 			}
 		}
 		latestBlock++
 	}
 
 	for {
-		if latestBlock >= 3000000 {
-			break
-		}
 		if len(txs) >= minNumberOfTx {
 			break
 		}
@@ -113,10 +114,10 @@ func (ts *TxSource) fetchTransaction(txHash string) (*txtargettypes.Tx, error) {
 		return nil, err
 	}
 
-	// if txSource.Result.V == "0x1b" || txSource.Result.V == "0x1c" || txSource.Result.V == "0x0" || txSource.Result.V == "0x1" {
-	// 	fmt.Printf("Drop tx %s\n", txHash)
-	// 	return nil, nil
-	// }
+	if txSource.Result.V == "0x1b" || txSource.Result.V == "0x1c" || txSource.Result.V == "0x0" || txSource.Result.V == "0x1" {
+		fmt.Printf("Drop tx %s\n", txHash)
+		return nil, nil
+	}
 
 	if txSource.IsBridgeTx() {
 		return nil, nil
