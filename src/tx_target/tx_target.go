@@ -46,7 +46,7 @@ func (tt *TxTarget) SendTxs(txs []*types.Tx) error {
 			txHashes = make([]string, 0, len(txs))
 		}
 
-		if txHash, err = tt.SendTx(tx.Bytes); err != nil {
+		if txHash, err = tt.SendTx(tx.Hash, tx.Bytes); err != nil {
 			return err
 		}
 		fromsMap[tx.From] = true
@@ -61,7 +61,7 @@ func (tt *TxTarget) SendTxs(txs []*types.Tx) error {
 	return nil
 }
 
-func (tt *TxTarget) SendTx(rlp []byte) (string, error) {
+func (tt *TxTarget) SendTx(txHash string, rlp []byte) (string, error) {
 	hexEncodedTx := hex.EncodeToString(rlp)
 	var resp []byte
 	var err error
@@ -77,7 +77,7 @@ func (tt *TxTarget) SendTx(rlp []byte) (string, error) {
 	}
 
 	if transactionRes.Error != nil {
-		return "", fmt.Errorf("%s", transactionRes.Error.Message)
+		return "", fmt.Errorf("hash (%s): %s", txHash, transactionRes.Error.Message)
 	}
 
 	return transactionRes.Result, nil

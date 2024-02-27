@@ -47,7 +47,7 @@ func (tt *TxTarget) EnsureFunding(txs []*types.Tx) error {
 	fmt.Printf("Broadcasting %d transactions for preparing initial funding\n", len(fundTxs))
 	fundTxsHashes := make([]string, 0, len(fundTxs))
 	for _, fundTx := range fundTxs {
-		if txHash, err = tt.SendTx(fundTx); err != nil {
+		if txHash, err = tt.SendTx("", fundTx); err != nil {
 			return err
 		}
 		fundTxsHashes = append(fundTxsHashes, txHash)
@@ -90,7 +90,7 @@ func (tt *TxTarget) makeFundingTx(recipientAddress string, nonceAddition uint64)
 	txData := &ethtypes.LegacyTx{
 		Nonce:    nonce + nonceAddition,
 		To:       &toAddress,
-		Value:    big.NewInt(0).Mul(big.NewInt(1000000000000000000), big.NewInt(25)),
+		Value:    big.NewInt(0).Mul(big.NewInt(1000000000000000000), big.NewInt(200)),
 		Gas:      uint64(1000000),
 		GasPrice: big.NewInt(100000000000),
 		Data:     nil,
