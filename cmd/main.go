@@ -21,12 +21,14 @@ func main() {
 	var txCount int
 	var faucetPrivateKey string
 	var fundingAmount int64
+	var txSendingLimit int64
 
 	flag.StringVar(&source, "source", "https://zkevm-rpc.com", "RPC address to get transactions from")
 	flag.StringVar(&target, "destination", "http://localhost:8467", "RPC addresses to send transactions to")
 	flag.StringVar(&faucetPrivateKey, "faucet-key", "", "Private key of the faucet wallet")
 	flag.IntVar(&txCount, "tx-count", 0, "Block number to start from")
 	flag.Int64Var(&fundingAmount, "funding-amount", 200, "This indicates how many ETH each account will be pre-funded")
+	flag.Int64Var(&txSendingLimit, "tx-sending-limit", -1, "Limit how many transactions per second are sent to the target")
 	flag.Parse()
 
 	ethClient, err := ethclient.Dial(target)
@@ -54,7 +56,7 @@ func main() {
 		return
 	}
 
-	txTarget := txtarget.New(target, ethClient, faucetPrivateKey, fundingAmount)
+	txTarget := txtarget.New(target, ethClient, faucetPrivateKey, fundingAmount, txSendingLimit)
 	if err := txTarget.EnsureFunding(txs); err != nil {
 		fmt.Printf("error: %+v\n", err)
 		return

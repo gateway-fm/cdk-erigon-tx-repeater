@@ -21,39 +21,53 @@ type TxTarget struct {
 	ethClient        *ethclient.Client
 	faucetPrivateKey string
 	fundingAmount    int64
+	txSendingLimit   int64
 }
 
-func New(endpoint string, ethClient *ethclient.Client, faucetPrivateKey string, fundingAmount int64) *TxTarget {
+func New(endpoint string, ethClient *ethclient.Client, faucetPrivateKey string, fundingAmount, txSendingLimit int64) *TxTarget {
 	return &TxTarget{
 		endpoint:         endpoint,
 		ethClient:        ethClient,
 		faucetPrivateKey: faucetPrivateKey,
 		fundingAmount:    fundingAmount,
+		txSendingLimit:   txSendingLimit,
 	}
 }
 
 func (tt *TxTarget) SendTxs(txs []*types.Tx) error {
 	var err error
 
-	for _, tx := range txs {
+	startTime := time.Now()
+
+	for i, tx := range txs {
 		if _, err = tt.SendTx(tx.Hash, tx.Bytes); err != nil {
 			return err
 		}
+
+		if tt.shouldApplyTxLimit() {
+			timeInMicroAtTheEndOfThisTx := int64(i+1) * 1000000 / tt.txSendingLimit
+			sleepTimeInMicro := timeInMicroAtTheEndOfThisTx - time.Since(startTime).Microseconds()
+			if sleepTimeInMicro > 0 {
+				time.Sleep(time.Duration(sleepTimeInMicro) * time.Microsecond)
+			}
+		}
 	}
 
-	startTime := time.Now()
+	if tt.shouldApplyTxLimit() {
+		fmt.Printf("Sent %d transactions for %.3f seconds\n", len(txs), float32(time.Since(startTime).Milliseconds())/1000)
+	}
 
 	fmt.Printf("Waiting for %d transactions\n", len(txs))
+	startTimeForPerfMeasurement := time.Now()
 	for i := len(txs) - 1; i >= 0; i-- {
 		if ok := tt.isTxProcessed(txs[i]); !ok {
 			return fmt.Errorf("tx not processed: %s", txs[i].Hash)
 		}
 	}
 
-	totalExecutionInSeconds := time.Since(startTime).Seconds()
-
 	fmt.Printf("Incorrectly completed %d out of %d\n", incorrectlyProcessTx, len(txs))
-	fmt.Printf("Executing transactions at %f tx/sec. rate\n", float64(len(txs))/totalExecutionInSeconds)
+	fmt.Printf("Executing transactions at %f tx/sec. rate (including SEND time)\n", float64(len(txs))/time.Since(startTime).Seconds())
+	fmt.Printf("Executing transactions at %f tx/sec. rate (excluding SEND time)\n", float64(len(txs))/time.Since(startTimeForPerfMeasurement).Seconds())
 
 	return nil
 }
@@ -116,10 +130,6 @@ func (tt *TxTarget) getBalanceByHexAddress(address string) (*big.Int, error) {
 	return tt.ethClient.BalanceAt(context.Background(), common.HexToAddress(address), nil)
 }
 
-func (tt *TxTarget) printBalance(address string) {
-	balance, err := tt.getBalanceByHexAddress(address)
-	if err != nil {
-		fmt.Println("Error getting balance")
-	}
-	fmt.Printf("Balance of %s [%v] = %s\n", address, common.HexToAddress(address), balance.String())
+func (tt *TxTarget) shouldApplyTxLimit() bool {
+	return tt.txSendingLimit > 0
 }
