@@ -36,3 +36,18 @@ func makeTransactionReqParams(txHash string) io.Reader {
 
 	return bytes.NewReader([]byte(paramsAsString))
 }
+
+func makeTransactionReceiptReqParams(txHash string) io.Reader {
+	paramsAsString := fmt.Sprintf(`
+	{
+		"jsonrpc":"2.0",
+		"method":"eth_getTransactionReceipt",
+		"params":[
+			"%s"
+		],
+		"id":"1"
+	}
+	`, txHash)
+
+	return bytes.NewReader([]byte(paramsAsString))
+}

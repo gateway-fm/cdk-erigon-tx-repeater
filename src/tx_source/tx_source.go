@@ -31,6 +31,7 @@ func (ts *TxSource) FetchAllTransactions(minNumberOfTx int) ([]*txtargettypes.Tx
 
 	if ts.persistor != nil {
 		latestBlock = ts.persistor.FetchLatestBlockNumber()
+		fmt.Printf("Reading %d blocks from disk\n", latestBlock)
 		for i := 1; i <= latestBlock; i++ {
 			if block, err = ts.persistor.FetchBlock(i); err != nil {
 				return nil, err
@@ -49,6 +50,10 @@ func (ts *TxSource) FetchAllTransactions(minNumberOfTx int) ([]*txtargettypes.Tx
 	for {
 		if len(txs) >= minNumberOfTx {
 			break
+		}
+
+		if latestBlock%100 == 0 {
+			fmt.Printf("Reading %d-%d blocks from RPC\n", latestBlock, latestBlock+99)
 		}
 
 		if block, err = ts.fetchBlock(latestBlock); err != nil {
@@ -114,15 +119,24 @@ func (ts *TxSource) fetchTransaction(txHash string) (*txtargettypes.Tx, error) {
 		return nil, err
 	}
 
-	if txSource.Result.V == "0x1b" || txSource.Result.V == "0x1c" || txSource.Result.V == "0x0" || txSource.Result.V == "0x1" {
-		fmt.Printf("Drop tx %s\n", txHash)
-		return nil, nil
+	// if txSource.Result.V == "0x1b" || txSource.Result.V == "0x1c" || txSource.Result.V == "0x0" || txSource.Result.V == "0x1" {
+	// 	fmt.Printf("Drop tx %s\n", txHash)
+	// 	return nil, nil
+	// }
+
+	// if txSource.IsBridgeTx() {
+	// 	return nil, nil
+	// }
+
+	if resp, err = utils.MakePostRequest(ts.endpoint, makeTransactionReceiptReqParams(txHash)); err != nil {
+		return nil, err
 	}
 
-	if txSource.IsBridgeTx() {
-		return nil, nil
+	var txReceiptSource types.TxReceipt
+	if err = json.Unmarshal(resp, &txReceiptSource); err != nil {
+		return nil, err
 	}
 
-	return txtargettypes.FromSourceTx(&txSource)
+	return txtargettypes.FromSourceTx(&txSource, &txReceiptSource)
 
 }

@@ -2,20 +2,21 @@ package types
 
 import (
 	"encoding/hex"
-	"math/big"
-	"strconv"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
 	txsourcetypes "github.com/gateway-fm/tx-repeater/src/tx_source/types"
+	"github.com/gateway-fm/tx-repeater/src/utils"
 )
 
 type Tx struct {
-	Bytes []byte `json:"bytes"`
-	From  string `json:"from"`
-	Hash  string `json:"hash"`
+	Bytes  []byte  `json:"bytes"`
+	From   string  `json:"from"`
+	To     *string `json:"to,omitempty"`
+	Hash   string  `json:"hash"`
+	Status uint64  `json:"status"`
 }
 
 type TxType int64
@@ -27,42 +28,44 @@ const (
 	DynamicFeeTx TxType = 0x02
 )
 
-func NewTx(bytes []byte, from, hash string) *Tx {
+func NewTx(bytes []byte, from string, to *string, hash string, status uint64) *Tx {
 	return &Tx{
-		Bytes: bytes,
-		From:  from,
-		Hash:  hash,
+		Bytes:  bytes,
+		From:   from,
+		To:     to,
+		Hash:   hash,
+		Status: status,
 	}
 }
 
-func FromSourceTx(resp *txsourcetypes.Tx) (*Tx, error) {
+func FromSourceTx(resp *txsourcetypes.Tx, txReceipt *txsourcetypes.TxReceipt) (*Tx, error) {
 	t := resp.Result
 
-	gasPrice := stringToBig(t.GasPrice)
-	value := stringToBig(t.Value)
-	v := stringToBig(t.V)
-	r := stringToBig(t.R)
-	s := stringToBig(t.S)
+	gasPrice := utils.StringToBig(t.GasPrice)
+	value := utils.StringToBig(t.Value)
+	v := utils.StringToBig(t.V)
+	r := utils.StringToBig(t.R)
+	s := utils.StringToBig(t.S)
 
-	gas, err := stringToUint(t.Gas)
+	gas, err := utils.StringToUint(t.Gas)
 	if err != nil {
 		return nil, err
 	}
 
-	nonce, err := stringToUint(t.Nonce)
+	nonce, err := utils.StringToUint(t.Nonce)
 	if err != nil {
 		return nil, err
 	}
 
 	var to []byte
 	if t.To != nil {
-		to, err = hex.DecodeString(trimHex(*t.To))
+		to, err = hex.DecodeString(utils.TrimHex(*t.To))
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	input, err := hex.DecodeString(trimHex(t.Input))
+	input, err := hex.DecodeString(utils.TrimHex(t.Input))
 	if err != nil {
 		return nil, err
 	}
@@ -85,26 +88,13 @@ func FromSourceTx(resp *txsourcetypes.Tx) (*Tx, error) {
 	}
 	tx := ethtypes.NewTx(txData)
 	b, _ := rlp.EncodeToBytes(tx)
-	return NewTx(b, t.From, t.Hash), nil
+	return NewTx(b, t.From, t.To, t.Hash, txReceipt.ParseAndGetStatus()), nil
 }
 
-func stringToInt(input string) (int64, error) {
-	return strconv.ParseInt(trimHex(input), 16, 64)
-}
-
-func stringToUint(input string) (uint64, error) {
-	return strconv.ParseUint(trimHex(input), 16, 64)
-}
-
-func stringToBig(input string) *big.Int {
-	result := new(big.Int)
-	result.SetString(trimHex(input), 16)
-	return result
-}
-
-func trimHex(input string) string {
-	if strings.HasPrefix(input, "0x") {
-		return input[2:]
+func (tx *Tx) IsToBridgeTx() bool {
+	if tx.To == nil {
+		return false
 	}
-	return input
+
+	return strings.EqualFold(*tx.To, utils.BRIDGE_ADDRESS)
 }

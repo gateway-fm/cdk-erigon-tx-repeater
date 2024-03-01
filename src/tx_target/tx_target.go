@@ -14,49 +14,46 @@ import (
 	"github.com/gateway-fm/tx-repeater/src/utils"
 )
 
+var incorrectlyProcessTx int = 0
+
 type TxTarget struct {
 	endpoint         string
 	ethClient        *ethclient.Client
 	faucetPrivateKey string
+	fundingAmount    int64
 }
 
-func New(endpoint string, ethClient *ethclient.Client, faucetPrivateKey string) *TxTarget {
+func New(endpoint string, ethClient *ethclient.Client, faucetPrivateKey string, fundingAmount int64) *TxTarget {
 	return &TxTarget{
 		endpoint:         endpoint,
 		ethClient:        ethClient,
 		faucetPrivateKey: faucetPrivateKey,
+		fundingAmount:    fundingAmount,
 	}
 }
 
 func (tt *TxTarget) SendTxs(txs []*types.Tx) error {
-	var txHash string
 	var err error
 
-	txHashes := make([]string, 0, len(txs))
-	fromsMap := map[string]bool{}
-
-	for i, tx := range txs {
-		if _, ok := fromsMap[tx.From]; ok {
-			fmt.Printf("Waiting for batch with %d entries\n", len(txHashes))
-			if err := tt.areTxsProcessed(txHashes); err != nil {
-				return nil
-			}
-
-			fromsMap = make(map[string]bool)
-			txHashes = make([]string, 0, len(txs))
-		}
-
-		if txHash, err = tt.SendTx(tx.Hash, tx.Bytes); err != nil {
+	for _, tx := range txs {
+		if _, err = tt.SendTx(tx.Hash, tx.Bytes); err != nil {
 			return err
 		}
-		fromsMap[tx.From] = true
-		txHashes = append(txHashes, txHash)
-		fmt.Printf("%d: %s\n", i, txHash)
 	}
 
-	if err := tt.areTxsProcessed(txHashes); err != nil {
-		return nil
+	startTime := time.Now()
+
+	fmt.Printf("Waiting for %d transactions\n", len(txs))
+	for i := len(txs) - 1; i >= 0; i-- {
+		if ok := tt.isTxProcessed(txs[i]); !ok {
+			return fmt.Errorf("tx not processed: %s", txs[i].Hash)
+		}
 	}
+
+	totalExecutionInSeconds := time.Since(startTime).Seconds()
+
+	fmt.Printf("Incorrectly completed %d out of %d\n", incorrectlyProcessTx, len(txs))
+	fmt.Printf("Executing transactions at %f tx/sec. rate\n", float64(len(txs))/totalExecutionInSeconds)
 
 	return nil
 }
@@ -83,24 +80,18 @@ func (tt *TxTarget) SendTx(txHash string, rlp []byte) (string, error) {
 	return transactionRes.Result, nil
 }
 
-func (tt *TxTarget) areTxsProcessed(txHashes []string) error {
-	for _, txHash := range txHashes {
-		if ok := tt.isTxProcessed(txHash); !ok {
-			return fmt.Errorf("tx not processed: %s", txHash)
-		}
-	}
-
-	return nil
-}
-
-func (tt *TxTarget) isTxProcessed(txHash string) bool {
+func (tt *TxTarget) isTxProcessed(tx *types.Tx) bool {
 	ctx := context.Background()
 
 	for {
-		_, err := tt.ethClient.TransactionReceipt(ctx, common.HexToHash(txHash))
+		receipt, err := tt.ethClient.TransactionReceipt(ctx, common.HexToHash(tx.Hash))
 		if err != nil {
 			time.Sleep(10 * time.Microsecond)
 			continue
+		}
+
+		if receipt.Status != tx.Status {
+			incorrectlyProcessTx++
 		}
 
 		return true
