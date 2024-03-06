@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	types "github.com/gateway-fm/tx-repeater/src/tx_target/types"
 	"github.com/gateway-fm/tx-repeater/src/utils"
@@ -58,16 +59,25 @@ func (tt *TxTarget) SendTxs(txs []*types.Tx) error {
 	}
 
 	fmt.Printf("Waiting for %d transactions\n", len(txs))
+	totalGas := uint64(0)
 	startTimeForPerfMeasurement := time.Now()
 	for i := len(txs) - 1; i >= 0; i-- {
-		if ok := tt.isTxProcessed(txs[i]); !ok {
-			return fmt.Errorf("tx not processed: %s", txs[i].Hash)
-		}
+		receipt := tt.waitTx(txs[i])
+		totalGas += receipt.GasUsed
+		// if receipt := tt.waitTx(txs[i]); !ok {
+		// 	return fmt.Errorf("tx not processed: %s", txs[i].Hash)
+		// }
 	}
 
+	fmt.Println()
 	fmt.Printf("Incorrectly completed %d out of %d\n", incorrectlyProcessTx, len(txs))
+	fmt.Println()
 	fmt.Printf("Executing transactions at %f tx/sec. rate (including SEND time)\n", float64(len(txs))/time.Since(startTime).Seconds())
 	fmt.Printf("Executing transactions at %f tx/sec. rate (excluding SEND time)\n", float64(len(txs))/time.Since(startTimeForPerfMeasurement).Seconds())
+	fmt.Println()
+	fmt.Printf("Gas %.2f gas/sec. (including SEND time)\n", float64(totalGas)/time.Since(startTime).Seconds())
+	fmt.Printf("Gas %.2f gas/sec. (excluding SEND time)\n", float64(totalGas)/time.Since(startTimeForPerfMeasurement).Seconds())
+	fmt.Println()
 
 	return nil
 }
@@ -94,7 +104,7 @@ func (tt *TxTarget) SendTx(txHash string, rlp []byte) (string, error) {
 	return transactionRes.Result, nil
 }
 
-func (tt *TxTarget) isTxProcessed(tx *types.Tx) bool {
+func (tt *TxTarget) waitTx(tx *types.Tx) *ethtypes.Receipt {
 	ctx := context.Background()
 
 	for {
@@ -108,7 +118,7 @@ func (tt *TxTarget) isTxProcessed(tx *types.Tx) bool {
 			incorrectlyProcessTx++
 		}
 
-		return true
+		return receipt
 	}
 }
 
