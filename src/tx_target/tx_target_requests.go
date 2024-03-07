@@ -13,3 +13,7 @@ func makeTxSendParams(hexEncodedTx string) io.Reader {
 
 	return bytes.NewReader([]byte(paramsAsString))
 }
+
+func makeTxPoolStatus() io.Reader {
+	return bytes.NewReader([]byte(`{"jsonrpc":"2.0","method":"txpool_status","params":[],"id":1}`))
+}

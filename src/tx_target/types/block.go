@@ -1,11 +1,11 @@
 package types
 
 type Block struct {
-	Number       int   `json:"number"`
-	Transactions []*Tx `json:"transactions"`
+	Number       uint64 `json:"number"`
+	Transactions []*Tx  `json:"transactions"`
 }
 
-func NewBlock(number, size int) *Block {
+func NewBlock(number uint64, size int) *Block {
 	return &Block{
 		Number:       number,
 		Transactions: make([]*Tx, 0, size),

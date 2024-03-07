@@ -1,142 +1,141 @@
 package txsource
 
 import (
-	"encoding/json"
 	"fmt"
+	"math/big"
 
 	persistor "github.com/gateway-fm/tx-repeater/src/persistor"
-	types "github.com/gateway-fm/tx-repeater/src/tx_source/types"
 	txtargettypes "github.com/gateway-fm/tx-repeater/src/tx_target/types"
-	utils "github.com/gateway-fm/tx-repeater/src/utils"
+	"github.com/gateway-fm/tx-repeater/src/utils"
+	"github.com/ledgerwatch/erigon-lib/common"
+	ethtypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/zk/datastream"
+	txtype "github.com/ledgerwatch/erigon/zk/tx"
 )
 
 type TxSource struct {
-	endpoint  string
-	persistor *persistor.Persistor
+	datastreamEndpoint string
+	rpcEndpoint        string
+	persistor          *persistor.Persistor
 }
 
-func New(endpoint string, persistor *persistor.Persistor) *TxSource {
+func New(datastreamEndpoint, rpcEndpoint string, persistor *persistor.Persistor) *TxSource {
 	return &TxSource{
-		endpoint:  endpoint,
-		persistor: persistor,
+		datastreamEndpoint: datastreamEndpoint,
+		rpcEndpoint:        rpcEndpoint,
+		persistor:          persistor,
 	}
 }
 
-func (ts *TxSource) FetchAllTransactions(minNumberOfTx int) ([]*txtargettypes.Tx, error) {
-	var block *txtargettypes.Block
+func (ts *TxSource) FetchAllTransactions(targetBlocksCount uint64) ([]*txtargettypes.Tx, error) {
+	var blocks []*txtargettypes.Block
 	var err error
 
 	txs := []*txtargettypes.Tx{}
-	latestBlock := 1
+	currentBlock := uint64(1)
 
 	if ts.persistor != nil {
-		latestBlock = ts.persistor.FetchLatestBlockNumber()
-		fmt.Printf("Reading %d blocks from disk\n", latestBlock)
-		for i := 1; i <= latestBlock; i++ {
-			if block, err = ts.persistor.FetchBlock(i); err != nil {
-				return nil, err
-			}
-
-			if block != nil {
-				txs = append(txs, block.Transactions...)
-				if len(txs) >= minNumberOfTx {
-					break
-				}
-			}
-		}
-		latestBlock++
-	}
-
-	for {
-		if len(txs) >= minNumberOfTx {
-			break
+		persistedBlocksCount := ts.persistor.FetchLatestBlockNumber()
+		endBlockNumber := targetBlocksCount
+		if endBlockNumber > persistedBlocksCount {
+			endBlockNumber = persistedBlocksCount
 		}
 
-		if latestBlock%100 == 0 {
-			fmt.Printf("Reading %d-%d blocks from RPC\n", latestBlock, latestBlock+99)
-		}
-
-		if block, err = ts.fetchBlock(latestBlock); err != nil {
+		fmt.Printf("Reading %d blocks from disk\n", endBlockNumber)
+		if blocks, err = ts.persistor.FetchBlocks(1, endBlockNumber); err != nil {
 			return nil, err
 		}
 
+		for _, block := range blocks {
+			txs = append(txs, block.Transactions...)
+		}
+		currentBlock = persistedBlocksCount + 1
+	}
+
+	for {
+		if currentBlock > targetBlocksCount {
+			break
+		}
+
+		requestedBlocksCount := uint64(1024)
+		maxBlocksCount := targetBlocksCount - (currentBlock - 1)
+		if requestedBlocksCount > maxBlocksCount {
+			requestedBlocksCount = maxBlocksCount
+		}
+
+		fmt.Printf("Reading [%d-%d] blocks from datastream\n", currentBlock, currentBlock+requestedBlocksCount-1)
+		if blocks, err = ts.fetchBlocks(currentBlock, int(requestedBlocksCount)); err != nil {
+			return nil, err
+		}
+
+		fetchedBlocksCount := uint64(len(blocks))
+
 		if ts.persistor != nil {
-			if block.HasTransactions() {
-				if err := ts.persistor.CreditBlock(block); err != nil {
+			filteredBlocks := make([]*txtargettypes.Block, 0, fetchedBlocksCount)
+			for _, block := range blocks {
+				if block.HasTransactions() {
+					filteredBlocks = append(filteredBlocks, block)
+				}
+			}
+
+			if err = ts.persistor.CreditBlocks(filteredBlocks); err != nil {
+				return nil, err
+			}
+			if fetchedBlocksCount > 0 {
+				if err := ts.persistor.CreditLatestBlockNumber(blocks[fetchedBlocksCount-1].Number); err != nil {
 					return nil, err
 				}
 			}
-			if err := ts.persistor.CreditLatestBlockNumber(block.Number); err != nil {
-				return nil, err
-			}
 		}
 
-		txs = append(txs, block.Transactions...)
-		latestBlock++
+		for _, block := range blocks {
+			txs = append(txs, block.Transactions...)
+		}
+
+		currentBlock += fetchedBlocksCount
 	}
 
 	return txs, nil
 }
 
-func (ts *TxSource) fetchBlock(blockNumber int) (*txtargettypes.Block, error) {
-	var txTarget *txtargettypes.Tx
-	var resp []byte
-	var err error
-
-	if resp, err = utils.MakePostRequest(ts.endpoint, makeBlockReqParams(blockNumber)); err != nil {
+func (ts *TxSource) fetchBlocks(startBlockNumber uint64, blocksCount int) ([]*txtargettypes.Block, error) {
+	l2blocks, _, _, _, err := datastream.DownloadL2Blocks(ts.datastreamEndpoint, startBlockNumber, blocksCount)
+	if err != nil {
 		return nil, err
 	}
 
-	var blockSource types.Block
-	if err = json.Unmarshal(resp, &blockSource); err != nil {
-		return nil, err
-	}
+	var txTo *string
+	var txToAddr *common.Address
+	var blocks []*txtargettypes.Block = make([]*txtargettypes.Block, 0, len(*l2blocks))
 
-	block := txtargettypes.NewBlock(blockNumber, len(blockSource.Result.Transactions))
+	signer := *(ethtypes.LatestSignerForChainID(big.NewInt(utils.CHAIN_ID)))
 
-	for _, txHash := range blockSource.Result.Transactions {
-		if txTarget, err = ts.fetchTransaction(txHash); err != nil {
-			return nil, err
-		}
-		if txTarget != nil {
+	for _, l2block := range *l2blocks {
+		block := txtargettypes.NewBlock(l2block.L2BlockNumber, len(l2block.L2Txs))
+		blocks = append(blocks, block)
+
+		for _, tx := range l2block.L2Txs {
+			ltx, _, err := txtype.DecodeTx(tx.Encoded, tx.EffectiveGasPricePercentage, (*l2blocks)[0].ForkId)
+			if err != nil {
+				return nil, err
+			}
+
+			from, err := ltx.Sender(signer)
+			if err != nil {
+				return nil, err
+			}
+
+			txToAddr = ltx.GetTo()
+			if txToAddr != nil {
+				txToValue := txToAddr.Hex()
+				txTo = &txToValue
+			} else {
+				txTo = nil
+			}
+			txTarget := txtargettypes.NewTx(tx.Encoded, from.Hex(), txTo, ltx.Hash().Hex(), 0)
 			block.AppendTx(txTarget)
 		}
 	}
 
-	return block, nil
-}
-
-func (ts *TxSource) fetchTransaction(txHash string) (*txtargettypes.Tx, error) {
-	var resp []byte
-	var err error
-
-	if resp, err = utils.MakePostRequest(ts.endpoint, makeTransactionReqParams(txHash)); err != nil {
-		return nil, err
-	}
-
-	var txSource types.Tx
-	if err = json.Unmarshal(resp, &txSource); err != nil {
-		return nil, err
-	}
-
-	// if txSource.Result.V == "0x1b" || txSource.Result.V == "0x1c" || txSource.Result.V == "0x0" || txSource.Result.V == "0x1" {
-	// 	fmt.Printf("Drop tx %s\n", txHash)
-	// 	return nil, nil
-	// }
-
-	// if txSource.IsBridgeTx() {
-	// 	return nil, nil
-	// }
-
-	if resp, err = utils.MakePostRequest(ts.endpoint, makeTransactionReceiptReqParams(txHash)); err != nil {
-		return nil, err
-	}
-
-	var txReceiptSource types.TxReceipt
-	if err = json.Unmarshal(resp, &txReceiptSource); err != nil {
-		return nil, err
-	}
-
-	return txtargettypes.FromSourceTx(&txSource, &txReceiptSource)
-
+	return blocks, nil
 }

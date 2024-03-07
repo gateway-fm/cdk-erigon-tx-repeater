@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	types "github.com/gateway-fm/tx-repeater/src/tx_target/types"
 	"github.com/gateway-fm/tx-repeater/src/utils"
+	"github.com/holiman/uint256"
+	"github.com/ledgerwatch/erigon-lib/common"
+	ethtypes "github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/crypto"
 )
 
 func (tt *TxTarget) EnsureFunding(txs []*types.Tx) error {
@@ -45,12 +46,17 @@ func (tt *TxTarget) EnsureFunding(txs []*types.Tx) error {
 	}
 
 	fmt.Printf("Broadcasting %d transactions for preparing initial funding\n", len(fundTxs))
-	fundTxsHashes := make([]string, 0, len(fundTxs))
-	for _, fundTx := range fundTxs {
+	fundTxsHashes := make([]string, 0, SENDING_QUEUE_SIZE)
+	for i, fundTx := range fundTxs {
 		if txHash, err = tt.SendTx("", fundTx); err != nil {
 			return err
 		}
 		fundTxsHashes = append(fundTxsHashes, txHash)
+
+		if (i+1)&(SENDING_QUEUE_SIZE-1) == 0 {
+			fmt.Printf("Sent %d funding transactions\n", i+1)
+			tt.waitForTxPoolToGoBelowLimit(SENDING_QUEUE_SIZE)
+		}
 	}
 
 	for _, txHash := range fundTxsHashes {
@@ -88,16 +94,18 @@ func (tt *TxTarget) makeFundingTx(recipientAddress string, nonceAddition uint64)
 
 	toAddress := common.HexToAddress(recipientAddress)
 	txData := &ethtypes.LegacyTx{
-		Nonce:    nonce + nonceAddition,
-		To:       &toAddress,
-		Value:    big.NewInt(0).Mul(big.NewInt(1000000000000000000), big.NewInt(tt.fundingAmount)),
-		Gas:      uint64(1000000),
-		GasPrice: big.NewInt(100000000000),
-		Data:     nil,
-		V:        big.NewInt(2237),
+		CommonTx: ethtypes.CommonTx{
+			Nonce: nonce + nonceAddition,
+			To:    &toAddress,
+			Value: uint256.MustFromBig(big.NewInt(0).Mul(big.NewInt(1000000000000000000), big.NewInt(0).SetUint64(tt.fundingAmount))),
+			Gas:   uint64(1000000),
+			Data:  nil,
+			V:     *uint256.MustFromBig(big.NewInt(2237)),
+		},
+		GasPrice: uint256.MustFromBig(big.NewInt(100000000000)),
 	}
 
-	signedTx, err := ethtypes.SignNewTx(privateKey, ethtypes.LatestSignerForChainID(big.NewInt(utils.CHAIN_ID)), txData)
+	signedTx, err := ethtypes.SignNewTx(privateKey, *ethtypes.LatestSignerForChainID(big.NewInt(utils.CHAIN_ID)), txData)
 	if err != nil {
 		return nil, err
 	}

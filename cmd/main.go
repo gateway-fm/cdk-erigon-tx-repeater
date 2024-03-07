@@ -5,33 +5,35 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gateway-fm/tx-repeater/src/persistor"
 	txsource "github.com/gateway-fm/tx-repeater/src/tx_source"
 	txtarget "github.com/gateway-fm/tx-repeater/src/tx_target"
 	txtargettypes "github.com/gateway-fm/tx-repeater/src/tx_target/types"
+	"github.com/ledgerwatch/erigon/ethclient"
 )
 
 func main() {
 	var txs []*txtargettypes.Tx
 	var err error
 
-	var source string
-	var target string
-	var txCount int
-	var faucetPrivateKey string
-	var fundingAmount int64
-	var txSendingLimit int64
+	var flagSourceDatastreamEndpoint string
+	var flagSourceRpcEndpoint string
+	var flagTargetRpcEndpoint string
+	var flagFaucetPrivateKey string
+	var flagBlocksCount uint64
+	var flagFundingAmount uint64
+	var flagTxSendingLimit int64
 
-	flag.StringVar(&source, "source", "https://zkevm-rpc.com", "RPC address to get transactions from")
-	flag.StringVar(&target, "destination", "http://localhost:8467", "RPC addresses to send transactions to")
-	flag.StringVar(&faucetPrivateKey, "faucet-key", "", "Private key of the faucet wallet")
-	flag.IntVar(&txCount, "tx-count", 0, "Block number to start from")
-	flag.Int64Var(&fundingAmount, "funding-amount", 200, "This indicates how many ETH each account will be pre-funded")
-	flag.Int64Var(&txSendingLimit, "tx-sending-limit", -1, "Limit how many transactions per second are sent to the target")
+	flag.StringVar(&flagSourceDatastreamEndpoint, "source-datastream-endpoint", "stream.zkevm-rpc.com:6900", "Source datastream URL")
+	flag.StringVar(&flagSourceRpcEndpoint, "source-rpc-endpoint", "stream.zkevm-rpc.com:6900", "Source RPC URL")
+	flag.StringVar(&flagTargetRpcEndpoint, "target-rpc-endpoint", "http://localhost:8467", "RPC URL to send transactions to")
+	flag.StringVar(&flagFaucetPrivateKey, "faucet-key", "", "Private key of the faucet wallet")
+	flag.Uint64Var(&flagBlocksCount, "blocks", 0, "Number of blocks to fetch from the source")
+	flag.Uint64Var(&flagFundingAmount, "funding-amount", 200, "This indicates how many ETH each account will be pre-funded")
+	flag.Int64Var(&flagTxSendingLimit, "tx-sending-limit", -1, "Limit how many transactions per second are sent to the target")
 	flag.Parse()
 
-	ethClient, err := ethclient.Dial(target)
+	ethClient, err := ethclient.Dial(flagTargetRpcEndpoint)
 	if err != nil {
 		fmt.Printf("error: %+v\n", err)
 		return
@@ -50,13 +52,13 @@ func main() {
 		return
 	}
 
-	txSource := txsource.New(source, persistor)
-	if txs, err = txSource.FetchAllTransactions(txCount); err != nil {
+	txSource := txsource.New(flagSourceDatastreamEndpoint, flagSourceRpcEndpoint, persistor)
+	if txs, err = txSource.FetchAllTransactions(flagBlocksCount); err != nil {
 		fmt.Printf("error: %+v\n", err)
 		return
 	}
 
-	txTarget := txtarget.New(target, ethClient, faucetPrivateKey, fundingAmount, txSendingLimit)
+	txTarget := txtarget.New(flagTargetRpcEndpoint, ethClient, flagFaucetPrivateKey, flagFundingAmount, flagTxSendingLimit)
 	if err := txTarget.EnsureFunding(txs); err != nil {
 		fmt.Printf("error: %+v\n", err)
 		return
