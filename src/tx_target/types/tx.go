@@ -1,11 +1,5 @@
 package types
 
-import (
-	"strings"
-
-	"github.com/gateway-fm/tx-repeater/src/utils"
-)
-
 type Tx struct {
 	Bytes []byte  `json:"bytes"`
 	From  string  `json:"from"`
@@ -29,12 +23,4 @@ func NewTx(bytes []byte, from string, to *string, hash string, status uint64) *T
 		To:    to,
 		Hash:  hash,
 	}
-}
-
-func (tx *Tx) IsToBridgeTx() bool {
-	if tx.To == nil {
-		return false
-	}
-
-	return strings.EqualFold(*tx.To, utils.BRIDGE_ADDRESS)
 }
