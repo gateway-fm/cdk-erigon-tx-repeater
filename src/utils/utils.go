@@ -8,8 +8,7 @@ import (
 	"strings"
 )
 
-const CHAIN_ID = 1101
-const BRIDGE_ADDRESS = "0x2a3dd3eb832af982ec71669e178424b10dca2ede"
+var CHAIN_ID = int64(1101)
 
 func MakePostRequest(endpoint string, params io.Reader) ([]byte, error) {
 	httpReq, err := http.NewRequest("POST", endpoint, params)

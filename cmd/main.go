@@ -9,6 +9,7 @@ import (
 	txsource "github.com/gateway-fm/tx-repeater/src/tx_source"
 	txtarget "github.com/gateway-fm/tx-repeater/src/tx_target"
 	txtargettypes "github.com/gateway-fm/tx-repeater/src/tx_target/types"
+	"github.com/gateway-fm/tx-repeater/src/utils"
 	"github.com/ledgerwatch/erigon/ethclient"
 )
 
@@ -31,6 +32,7 @@ func main() {
 	flag.Uint64Var(&flagBlocksCount, "blocks", 0, "Number of blocks to fetch from the source")
 	flag.Uint64Var(&flagFundingAmount, "funding-amount", 200, "This indicates how many ETH each account will be pre-funded")
 	flag.Int64Var(&flagTxSendingLimit, "tx-sending-limit", -1, "Limit how many transactions per second are sent to the target")
+	flag.Int64Var(&utils.CHAIN_ID, "chain-id", 1101, "The chain-id of the sequencer")
 	flag.Parse()
 
 	ethClient, err := ethclient.Dial(flagTargetRpcEndpoint)
