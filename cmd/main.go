@@ -71,5 +71,5 @@ func main() {
 		return
 	}
 
-	fmt.Printf("Done\n")
+	fmt.Printf("\nDone\n")
 }
