@@ -197,7 +197,7 @@ func (tt *TxTarget) calculateAndLogGasBasedOnBlocks(txsCount int, fromBlock uint
 
 		totalGas += block.GasUsed()
 
-		if (bn+1-fromBlock)%5 == 0 || bn == toBlock {
+		if (bn+1-fromBlock)%1000 == 0 || bn == toBlock {
 			if refBlock != nil {
 				fmt.Printf("Average gas %.2f gas/sec. [blocks %d - %d]%s\n", float64(totalGas)/float64(block.Time()-refBlock.Time()), refBlock.NumberU64()+1, bn, inaccurateNote)
 			}
