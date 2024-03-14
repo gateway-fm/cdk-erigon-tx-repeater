@@ -22,16 +22,14 @@ type TxTarget struct {
 	targetRpcEndpoint string
 	ethClient         *ethclient.Client
 	faucetPrivateKey  string
-	fundingAmount     uint64
 	txSendingLimit    int64
 }
 
-func New(targetRpcEndpoint string, ethClient *ethclient.Client, faucetPrivateKey string, fundingAmount uint64, txSendingLimit int64) *TxTarget {
+func New(targetRpcEndpoint string, ethClient *ethclient.Client, faucetPrivateKey string, txSendingLimit int64) *TxTarget {
 	return &TxTarget{
 		targetRpcEndpoint: targetRpcEndpoint,
 		ethClient:         ethClient,
 		faucetPrivateKey:  faucetPrivateKey,
-		fundingAmount:     fundingAmount,
 		txSendingLimit:    txSendingLimit,
 	}
 }
@@ -75,7 +73,7 @@ func (tt *TxTarget) SendTxs(txs []*types.Tx) error {
 	}
 	fmt.Printf("Total average gas %.2f gas/sec.\n", float64(totalGas)/timeIncludingStart)
 
-	fmt.Printf("\nCalculating per 1000txs gas\n")
+	fmt.Printf("\nCalculating per 1000blocks gas\n")
 	err = tt.calculateAndLogGasBasedOnBlocks(txsCount, fromBlock, toBlock)
 	if err != nil {
 		return err

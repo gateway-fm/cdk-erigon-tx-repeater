@@ -22,7 +22,6 @@ func main() {
 	var flagTargetRpcEndpoint string
 	var flagFaucetPrivateKey string
 	var flagBlocksCount uint64
-	var flagFundingAmount uint64
 	var flagTxSendingLimit int64
 
 	flag.StringVar(&flagSourceDatastreamEndpoint, "source-datastream-endpoint", "stream.zkevm-rpc.com:6900", "Source datastream URL")
@@ -30,7 +29,6 @@ func main() {
 	flag.StringVar(&flagTargetRpcEndpoint, "target-rpc-endpoint", "http://localhost:8467", "RPC URL to send transactions to")
 	flag.StringVar(&flagFaucetPrivateKey, "faucet-key", "", "Private key of the faucet wallet")
 	flag.Uint64Var(&flagBlocksCount, "blocks", 0, "Number of blocks to fetch from the source")
-	flag.Uint64Var(&flagFundingAmount, "funding-amount", 200, "This indicates how many ETH each account will be pre-funded")
 	flag.Int64Var(&flagTxSendingLimit, "tx-sending-limit", -1, "Limit how many transactions per second are sent to the target")
 	flag.Int64Var(&utils.CHAIN_ID, "chain-id", 1101, "The chain-id of the sequencer")
 	flag.Parse()
@@ -60,7 +58,7 @@ func main() {
 		return
 	}
 
-	txTarget := txtarget.New(flagTargetRpcEndpoint, ethClient, flagFaucetPrivateKey, flagFundingAmount, flagTxSendingLimit)
+	txTarget := txtarget.New(flagTargetRpcEndpoint, ethClient, flagFaucetPrivateKey, flagTxSendingLimit)
 	if err := txTarget.EnsureFunding(txs); err != nil {
 		fmt.Printf("error: %+v\n", err)
 		return

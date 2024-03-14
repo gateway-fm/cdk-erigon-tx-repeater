@@ -7,6 +7,7 @@ import (
 	persistor "github.com/gateway-fm/tx-repeater/src/persistor"
 	txtargettypes "github.com/gateway-fm/tx-repeater/src/tx_target/types"
 	"github.com/gateway-fm/tx-repeater/src/utils"
+	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
 	ethtypes "github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/zk/datastream"
@@ -132,7 +133,20 @@ func (ts *TxSource) fetchBlocks(startBlockNumber uint64, blocksCount int) ([]*tx
 			} else {
 				txTo = nil
 			}
-			txTarget := txtargettypes.NewTx(tx.Encoded, from.Hex(), txTo, ltx.Hash().Hex(), 0)
+
+			txFunds := uint256.NewInt(500000000000000000)
+
+			txCost := ltx.Cost()
+			if txCost != nil {
+				txFunds = txFunds.Add(txFunds, txCost)
+			}
+
+			txValue := ltx.GetValue()
+			if txValue != nil {
+				txFunds = txFunds.Add(txFunds, txValue)
+			}
+
+			txTarget := txtargettypes.NewTx(tx.Encoded, from.Hex(), txTo, ltx.Hash().Hex(), txFunds.Hex())
 			block.AppendTx(txTarget)
 		}
 	}
