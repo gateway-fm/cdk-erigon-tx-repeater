@@ -58,7 +58,7 @@ func (ts *TxSource) FetchAllTransactions(targetBlocksCount uint64) ([]*txtargett
 			break
 		}
 
-		requestedBlocksCount := uint64(1024)
+		requestedBlocksCount := uint64(4096)
 		maxBlocksCount := targetBlocksCount - (currentBlock - 1)
 		if requestedBlocksCount > maxBlocksCount {
 			requestedBlocksCount = maxBlocksCount
