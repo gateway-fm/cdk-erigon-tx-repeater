@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strings"
 	"time"
 
 	types "github.com/gateway-fm/tx-repeater/src/tx_target/types"
@@ -35,14 +36,20 @@ func New(targetRpcEndpoint string, ethClient *ethclient.Client, faucetPrivateKey
 }
 
 func (tt *TxTarget) SendTxs(txs []*types.Tx) error {
+	var txHash string
 	var err error
 
 	txsCount := len(txs)
 	startTime := time.Now()
+	waitForTxs := []*types.Tx{}
 
 	for i, tx := range txs {
-		if _, err = tt.SendTx(tx.Hash, tx.Bytes); err != nil {
+		if txHash, err = tt.SendTx(tx.Hash, tx.Bytes); err != nil {
 			return err
+		}
+
+		if txHash != "" {
+			waitForTxs = append(waitForTxs, tx)
 		}
 
 		if (i+1)&(SENDING_QUEUE_SIZE-1) == 0 {
@@ -61,20 +68,21 @@ func (tt *TxTarget) SendTxs(txs []*types.Tx) error {
 
 	fmt.Printf("Sent %d transactions for %.3f seconds\n", txsCount, float32(time.Since(startTime).Milliseconds())/1000)
 
-	fmt.Printf("\nWaiting for %d transactions\n", txsCount)
-	tt.waitToFinishExecution(txs, txsCount)
+	waitForTxsCount := len(waitForTxs)
+	fmt.Printf("\nWaiting for %d transactions\n", waitForTxsCount)
+	tt.waitToFinishExecution(waitForTxs, waitForTxsCount)
 	timeIncludingStart := time.Since(startTime).Seconds()
-	fmt.Printf("Executing transactions at %f tx/sec. rate\n", float64(txsCount)/timeIncludingStart)
+	fmt.Printf("Executing transactions at %f tx/sec. rate\n", float64(waitForTxsCount)/timeIncludingStart)
 
-	fmt.Printf("\nGetting receipts of %d transactions\n", txsCount)
-	totalGas, fromBlock, toBlock, err := tt.processTxsReceipts(txs, txsCount)
+	fmt.Printf("\nGetting receipts of %d transactions\n", waitForTxsCount)
+	totalGas, fromBlock, toBlock, err := tt.processTxsReceipts(waitForTxs, waitForTxsCount)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("Total average gas %.2f gas/sec.\n", float64(totalGas)/timeIncludingStart)
 
 	fmt.Printf("\nCalculating per 1000blocks gas\n")
-	err = tt.calculateAndLogGasBasedOnBlocks(txsCount, fromBlock, toBlock)
+	err = tt.calculateAndLogGasBasedOnBlocks(waitForTxsCount, fromBlock, toBlock)
 	if err != nil {
 		return err
 	}
@@ -98,6 +106,9 @@ func (tt *TxTarget) SendTx(txHash string, rlp []byte) (string, error) {
 	}
 
 	if transactionRes.Error != nil {
+		if strings.Contains(transactionRes.Error.Message, "EIP-155") {
+			return "", nil
+		}
 		return "", fmt.Errorf("hash (%s): %s", txHash, transactionRes.Error.Message)
 	}
 
