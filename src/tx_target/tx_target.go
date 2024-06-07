@@ -168,7 +168,7 @@ func (tt *TxTarget) processTxsReceipts(txs []*types.Tx, txsCount int) (uint64, u
 	for i := txsCount - 1; i >= 0; i-- {
 		receipt, err := tt.fetchReceipt(txs[i].Hash)
 		if err != nil {
-			return totalGas, fromBlock, toBlock, fmt.Errorf("tx %d was not processed but the tx pool was already empty: %v", i, err)
+			return totalGas, fromBlock, toBlock, fmt.Errorf("tx %s (index - %d) was not processed but the tx pool was already empty: %v", txs[i].Hash, i, err)
 		}
 
 		totalGas += receipt.GasUsed
