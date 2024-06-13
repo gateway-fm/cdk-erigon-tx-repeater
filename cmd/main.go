@@ -34,11 +34,13 @@ func main() {
 	flag.Parse()
 
 	ethClient, err := ethclient.Dial(flagTargetRpcEndpoint)
+	if ethClient != nil {
+		defer ethClient.Close()
+	}
 	if err != nil {
 		fmt.Printf("error: %+v\n", err)
 		return
 	}
-	defer ethClient.Close()
 
 	currentWorkingDir, err := os.Getwd()
 	if err != nil {
