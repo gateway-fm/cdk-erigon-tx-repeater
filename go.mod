@@ -24,7 +24,7 @@ require (
 	github.com/gateway-fm/vectorized-poseidon-gold v1.0.0 // indirect
 	github.com/gballet/go-verkle v0.0.0-20221121182333-31427a1f2d35 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/hpcloud/tail v1.0.0 // indirect
